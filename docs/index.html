@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Insider Tape</title>
+<style>
+  body {
+    background: #fff;
+    color: #222;
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+  h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; }
+  .updated { color: #888; font-size: 12px; margin-bottom: 32px; }
+  h2 {
+    font-size: 16px; font-weight: 600;
+    margin: 32px 0 12px; padding-bottom: 6px;
+    border-bottom: 1px solid #ddd;
+  }
+  .entry { padding: 12px 0; border-bottom: 1px solid #eee; }
+  .entry:last-child { border-bottom: none; }
+  .row1 { font-weight: 600; margin-bottom: 4px; }
+  .ticker { color: #c0392b; }
+  .row2, .row3 { color: #555; font-size: 13px; }
+  .label { color: #999; display: inline-block; width: 70px; }
+  .empty { color: #999; font-style: italic; padding: 12px 0; }
+  a { color: #2980b9; text-decoration: none; font-size: 12px; }
+  a:hover { text-decoration: underline; }
+  .txn-list {
+    margin-top: 6px;
+    padding-left: 70px;
+    color: #666;
+    font-size: 12px;
+    line-height: 1.7;
+  }
+  .txn-list .txn-date {
+    color: #999;
+    display: inline-block;
+    width: 95px;
+  }
+  .txn-list .txn-amount {
+    color: #444;
+    font-weight: 500;
+  }
+  .note {
+    color: #999;
+    font-size: 11px;
+    font-style: italic;
+    margin-top: 4px;
+    padding-left: 70px;
+  }
+  footer {
+    margin-top: 60px; color: #999; font-size: 12px;
+    border-top: 1px solid #eee; padding-top: 16px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Insider Tape</h1>
+<div class="updated">마지막 업데이트: <span id="last-updated">—</span></div>
+
+<h2>🇰🇷 한국 — 임원·이사 장내매수 (1억원 이상)</h2>
+<div id="kr-list"></div>
+
+<h2>🇯🇵 일본 — 5%+ 대주주 보유 비율 증가 (대량보유보고서)</h2>
+<div id="jp-list"></div>
+
+<h2>🇺🇸 미국 — Form 4 Officer/Director Purchases ($100K+)</h2>
+<div id="us-list"></div>
+
+<footer>
+  Source: DART (한국) · EDINET (일본) · SEC EDGAR (미국) · 개인 리서치 도구, 투자 권유 아님
+</footer>
+
+<script>
+  const fmtKRW = (n) => {
+    if (n == null) return '—';
+    if (n >= 1e12) return (n / 1e12).toFixed(2) + '조원';
+    if (n >= 1e8) return (n / 1e8).toFixed(1) + '억원';
+    return n.toLocaleString() + '원';
+  };
+  const fmtUSD = (n) => {
+    if (n == null) return '—';
+    if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
+    if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
+    if (n >= 1e3) return '$' + (n / 1e3).toFixed(0) + 'K';
+    return '$' + n.toLocaleString();
+  };
+  const fmtJPY = (n) => {
+    if (n == null) return '—';
+    if (n >= 1e12) return '¥' + (n / 1e12).toFixed(2) + '조';
+    if (n >= 1e8) return '¥' + (n / 1e8).toFixed(1) + '억';
+    if (n >= 1e4) return '¥' + (n / 1e4).toFixed(0) + '만';
+    return '¥' + n.toLocaleString();
+  };
+  const fmtDate = (iso) => {
+    const d = new Date(iso);
+    return d.getFullYear() + '-' +
+      String(d.getMonth() + 1).padStart(2, '0') + '-' +
+      String(d.getDate()).padStart(2, '0') + ' ' +
+      String(d.getHours()).padStart(2, '0') + ':' +
+      String(d.getMinutes()).padStart(2, '0');
+  };
+
+  function renderKR(items) {
+    const el = document.getElementById('kr-list');
+    if (!items || items.length === 0) {
+      el.innerHTML = '<div class="empty">오늘 해당 공시 없음</div>';
+      return;
+    }
+    el.innerHTML = items
+      .sort((a, b) => b.transaction_amount_krw - a.transaction_amount_krw)
+      .map(x => {
+        const txns = x.transactions || [];
+        const isMultiDay = txns.length > 1;
+        const txnList = isMultiDay
+          ? `<div class="txn-list">${txns.map(t =>
+              `<div><span class="txn-date">${t.date}</span> <span class="txn-amount">${fmtKRW(t.amount_krw)}</span> · ${t.shares.toLocaleString()}주 @ ₩${t.price_per_share.toLocaleString()}</div>`
+            ).join('')}</div>`
+          : '';
+        const summaryLine = isMultiDay
+          ? `<strong>${fmtKRW(x.transaction_amount_krw)}</strong> 합계 · ${x.date_range} (${txns.length}일 분할매수) · <a href="${x.filing_url}" target="_blank">DART ↗</a>`
+          : `<strong>${fmtKRW(x.transaction_amount_krw)}</strong> · ${x.date_range} · ${x.shares.toLocaleString()}주 @ ₩${(txns[0]?.price_per_share || 0).toLocaleString()} · <a href="${x.filing_url}" target="_blank">DART ↗</a>`;
+        return `
+        <div class="entry">
+          <div class="row1">
+            <span class="ticker">${x.ticker}</span> ${x.name}
+            · 시총 ${fmtKRW(x.market_cap_krw)}
+          </div>
+          <div class="row2"><span class="label">사업</span>${x.business}</div>
+          <div class="row2"><span class="label">매수자</span>${x.insider_name} (${x.insider_role})</div>
+          <div class="row3"><span class="label">매수금액</span>${summaryLine}</div>
+          ${txnList}
+        </div>
+      `;
+      }).join('');
+  }
+
+  function renderUS(items) {
+    const el = document.getElementById('us-list');
+    if (!items || items.length === 0) {
+      el.innerHTML = '<div class="empty">No qualifying filings today</div>';
+      return;
+    }
+    el.innerHTML = items
+      .sort((a, b) => b.transaction_amount_usd - a.transaction_amount_usd)
+      .map(x => {
+        const txns = x.transactions || [];
+        const isMultiDay = txns.length > 1;
+        const txnList = isMultiDay
+          ? `<div class="txn-list">${txns.map(t =>
+              `<div><span class="txn-date">${t.date}</span> <span class="txn-amount">${fmtUSD(t.amount_usd)}</span> · ${t.shares.toLocaleString()} sh @ $${t.price_per_share.toFixed(2)}</div>`
+            ).join('')}</div>`
+          : '';
+        const summaryLine = isMultiDay
+          ? `<strong>${fmtUSD(x.transaction_amount_usd)}</strong> total · ${x.date_range} (${txns.length} days) · <a href="${x.filing_url}" target="_blank">EDGAR ↗</a>`
+          : `<strong>${fmtUSD(x.transaction_amount_usd)}</strong> · ${x.date_range} · ${x.shares.toLocaleString()} sh @ $${(txns[0]?.price_per_share || 0).toFixed(2)} · <a href="${x.filing_url}" target="_blank">EDGAR ↗</a>`;
+        return `
+        <div class="entry">
+          <div class="row1">
+            <span class="ticker">${x.ticker}</span> ${x.name}
+            · Mkt Cap ${fmtUSD(x.market_cap_usd)}
+          </div>
+          <div class="row2"><span class="label">Business</span>${x.business}</div>
+          <div class="row2"><span class="label">Insider</span>${x.insider_name} (${x.insider_role})</div>
+          <div class="row3"><span class="label">Amount</span>${summaryLine}</div>
+          ${txnList}
+        </div>
+      `;
+      }).join('');
+  }
+
+  function renderJP(items) {
+    const el = document.getElementById('jp-list');
+    if (!items || items.length === 0) {
+      el.innerHTML = '<div class="empty">오늘 해당 공시 없음</div>';
+      return;
+    }
+    el.innerHTML = items
+      .sort((a, b) => (b.transaction_amount_jpy || 0) - (a.transaction_amount_jpy || 0))
+      .map(x => {
+        const pctChange = x.pct_prior != null
+          ? `${x.pct_prior.toFixed(2)}% → ${x.pct_current.toFixed(2)}%`
+          : `신규 ${x.pct_current.toFixed(2)}%`;
+        const docLabel = x.doc_type === '040' ? '신규(040)' : '변경(050)';
+        const txns = x.transactions || [];
+        const hasTxns = txns.length > 0;
+        const txnList = hasTxns
+          ? `<div class="txn-list">${txns.map(t => {
+              const amtPart = t.amount_jpy ? `<span class="txn-amount">${fmtJPY(t.amount_jpy)}</span> · ` : '';
+              const pricePart = t.price_per_share ? ` @ ¥${t.price_per_share.toFixed(2)}` : '';
+              return `<div><span class="txn-date">${t.date}</span> ${amtPart}${t.shares.toLocaleString()}주${pricePart}</div>`;
+            }).join('')}</div>`
+          : `<div class="note">개별 거래일 정보가 보고서에 없음 (신고일 기준 누적)</div>`;
+        const summaryLine = hasTxns && txns.length > 1
+          ? `<strong>${fmtJPY(x.transaction_amount_jpy)}</strong> 합계 · ${txns.length}일 분할매수 · 보유 ${pctChange} · ${docLabel} · <a href="${x.filing_url}" target="_blank">EDINET ↗</a>`
+          : `<strong>${fmtJPY(x.transaction_amount_jpy)}</strong> · 보유 ${pctChange} · ${docLabel} · <a href="${x.filing_url}" target="_blank">EDINET ↗</a>`;
+        return `
+        <div class="entry">
+          <div class="row1">
+            <span class="ticker">${x.ticker}</span> ${x.name}
+            · 시총 ${fmtJPY(x.market_cap_jpy)}
+          </div>
+          <div class="row2"><span class="label">사업</span>${x.business}</div>
+          <div class="row2"><span class="label">매수자</span>${x.filer_name}</div>
+          <div class="row3"><span class="label">매수금액</span>${summaryLine}</div>
+          ${txnList}
+        </div>
+      `;
+      }).join('');
+  }
+
+  fetch('data.json?_=' + Date.now())
+    .then(r => r.json())
+    .then(data => {
+      document.getElementById('last-updated').textContent = fmtDate(data.last_updated);
+      renderKR(data.kr);
+      renderJP(data.jp);
+      renderUS(data.us);
+    })
+    .catch(err => {
+      document.getElementById('last-updated').textContent = 'data.json 없음';
+    });
+</script>
+
+</body>
+</html>
