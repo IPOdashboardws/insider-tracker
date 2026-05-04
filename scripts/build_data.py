@@ -56,10 +56,7 @@ def main() -> None:
     jp = run("fetch_jp.py")
     print(f"[build] JP: {len(jp)} entries", file=sys.stderr)
 
-    # Preserve previous data if all fetchers failed (avoid wiping the dashboard)
-    if not kr and not us and not jp and OUT.exists():
-        print("[build] All fetchers empty; preserving existing data.json", file=sys.stderr)
-        return
+   
 
     payload = {
         "last_updated": datetime.now(KST).isoformat(),
